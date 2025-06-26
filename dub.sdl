@@ -1,7 +1,7 @@
 name "darktemple"
-description "A minimal D application."
+description "Compile-time templates in jinja-like style."
 authors "Dmytro Katyukha"
-copyright "Copyright © 2024, Dmytro Katyukha"
+copyright "Copyright © 2025, Dmytro Katyukha"
 license "MPL-2.0"
 targetType "library"
 
@@ -9,5 +9,6 @@ configuration "library" {
 }
 
 configuration "unittest" {
+    stringImportPaths "test-data/"
     dflags "-checkaction=context" "-allinst"
 }

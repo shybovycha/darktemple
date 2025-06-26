@@ -1,100 +1,151 @@
 module darktemple.parser;
 
 private import std.algorithm: canFind;
+private import std.ascii: isWhite;
 
 // TODO: Create ParserConfig struct instead and use it as template parametr for parser
 enum Block : string {
-    FieldStart="{{",
-    FieldEnd="}}",
+    PlaceholderStart="{{",
+    PlaceholderEnd="}}",
     StatementStart="{%",
     StatementEnd="%}",
     CommentStart="{#",
     CommentEnd="#}",
 }
 
+enum string[] blockStartTokens = [Block.PlaceholderStart, Block.StatementStart, Block.CommentStart];
 
+enum FragmentType {
+    Text,
+    Placeholder,
+    Statement,
+    Comment,
+}
+
+pure struct Fragment {
+    FragmentType type;
+    string data;
+    ulong line;
+}
+
+// TODO: Throw error, when  cannot find block end ('}}', '%}', '#}')
 pure struct Parser {
     private immutable string _data;
 
     private ulong _cursor = 0;
+    private ulong _cursor_ln = 0;
     private ulong _block_start = 0;
+    private ulong _block_start_ln = 0;
     private ulong _block_end = 0;
+    private FragmentType _block_type;
 
     this(immutable string data) pure {
         _data = data;
     }
 
-    string front() pure {
+    immutable(Fragment) front() pure {
         if (_block_end <= _block_start)
             findNextBlock;
 
         if (_block_end > _block_start)
-            return _data[_block_start .. _block_end];
+            return Fragment(
+                type: _block_type,
+                data: _data[_block_start .. _block_end],
+                line: _block_start_ln,
+            );
 
-        return "";
+        assert(0, "Parser result already consumed!");
     }
 
     bool empty() const pure {
-        return _cursor == _data.length;
+        return _block_start >= _data.length;
     }
 
-    void consumeBlock(in string[] search_tokens, in bool include_end=false) pure {
-        while (_cursor < _data.length - 2) {
-            if (search_tokens.canFind(_data[_cursor .. _cursor+2])) {
-                if (include_end) {
-                    // Here we have to include search_token,
-                    // so we have to move cursor (and _block_end) to first symbol after search_token
-                    _block_end = _cursor + 2;
-                    _cursor += 2;
-                } else {
-                    // cursor position is on token found, thus no need to move it forward.
-                    // So, we set only _block_end.
-                    _block_end = _cursor;
-                }
-                return;
+    void consumeBlock() pure {
+        // in case of non-text blocks, we have to skip block start token and strip spaces
+        final switch(_block_type) {
+            case FragmentType.Text:
+                // Do nothing here. It is just text
+                break;
+            case FragmentType.Placeholder, FragmentType.Statement, FragmentType.Comment:
+                _cursor += 2;
+                while (_data[_cursor].isWhite) _cursor++;
+                _block_start = _cursor;
+                break;
+        }
+        while (_cursor < _data.length) {
+            if (_data[_cursor] == '\n') _cursor_ln++;
+
+            final switch(_block_type) {
+                case FragmentType.Text:
+                    if (_data.length - _cursor >= 2 && blockStartTokens.canFind(_data[_cursor .. _cursor+2])) {
+                        _block_end = _cursor;
+                        return;
+                    }
+                    break;
+                case FragmentType.Placeholder:
+                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == Block.PlaceholderEnd) {
+                        _block_end = _cursor;
+                        _cursor += 2;
+                        while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
+                        return;
+                    }
+                    break;
+                case FragmentType.Statement:
+                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == Block.StatementEnd) {
+                        _block_end = _cursor;
+                        _cursor += 2;
+                        while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
+                        return;
+                    }
+                    break;
+                case FragmentType.Comment:
+                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == Block.CommentEnd) {
+                        _block_end = _cursor;
+                        _cursor += 2;
+                        while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
+                        return;
+                    }
+                    break;
             }
+
             _cursor++;
         }
         _block_end = _data.length;
     }
 
-    void consumeTextBlock() pure {
-        consumeBlock(
-            search_tokens: [Block.FieldStart, Block.StatementStart, Block.CommentStart],
-            include_end: false,
-        );
-    }
-
     void findNextBlock() pure {
-        if (_data.length - _cursor < 4) {
-            // There are less then 4 digits, left, thus it could be just text block.
-            _block_start = _cursor;
-            _block_end = _data.length;
-            _cursor = _data.length;
+        if (_data.length - _cursor < 3) {
+            // There are less then 3 digits, left, thus it could be just text block.
+            _block_type = FragmentType.Text;
+            consumeBlock;
             return;
         }
         import std.stdio;
         switch (_data[_cursor .. _cursor + 2]) {
-            case Block.FieldStart:
-                consumeBlock([Block.FieldEnd], include_end: true);
+            case Block.PlaceholderStart:
+                _block_type = FragmentType.Placeholder;
+                consumeBlock;
                 return;
             case Block.StatementStart:
-                consumeBlock([Block.StatementEnd], include_end: true);
+                _block_type = FragmentType.Statement;
+                consumeBlock;
                 return;
             case Block.CommentStart:
-                consumeBlock([Block.CommentEnd], include_end: true);
-
-                // We have to skip comment blocks, thus just find next block.
-                findNextBlock;
+                _block_type = FragmentType.Comment;
+                consumeBlock;
                 return;
             default:
-                consumeTextBlock();
+                _block_type = FragmentType.Text;
+                consumeBlock;
                 return;
         }
     }
 
-    void popFront() pure {
-        _block_start = _block_end;
+    void popFront() pure
+    in (!empty, "Attempt to popFront already consumed parser") {
+        _block_start = _cursor;
+        _block_start_ln = _cursor_ln;
     }
 
 }
@@ -104,31 +155,123 @@ pure struct Parser {
 unittest {
     auto p = Parser("Hello {{ name }}!");
     assert(!p.empty);
-    assert(p.front == "Hello ");
+    assert(p.front.data == "Hello ");
+    assert(p.front.data == "Hello ");  // No changes when getting front
+    assert(p.front.type == FragmentType.Text);
     p.popFront;
     assert(!p.empty);
-    assert(p.front == "{{ name }}");
+    assert(p.front.data == "name");
+    assert(p.front.type == FragmentType.Placeholder);
     p.popFront;
     assert(!p.empty);
-    assert(p.front == "!");
+    assert(p.front.data == "!");
+    assert(p.front.type == FragmentType.Text);
+    assert(!p.empty);
     p.popFront;
     assert(p.empty);
 }
 
 // Simple test with only placeholder
 unittest {
+    import std.algorithm;
     import std.array: array;
     auto p = Parser("Hello {{ name }}! Some {% statement %} and {# comment #}.");
 
     // Comment blocks should be ignored (skipped) by parser.
-    assert(p.array == ["Hello ", "{{ name }}", "! Some ", "{% statement %}", " and ", "."]);
+    assert(p.map!((in a) => a.data).array == ["Hello ", "name", "! Some ", "statement", " and ", "comment", "."]);
 }
 
 // Test that parser works in compile time
 unittest {
+    import std.algorithm;
     import std.array: array;
-    immutable auto a = Parser("Hello {{ name }}! Some {% statement %} and {# comment #}.").array;
+    immutable auto a = Parser("Hello {{ name }}! Some {% statement %} and {# comment #}.").array.map!((a) => a.data).array;
 
     // Comment blocks should be ignored (skipped) by parser.
-    assert(a == ["Hello ", "{{ name }}", "! Some ", "{% statement %}", " and ", "."]);
+    assert(a == ["Hello ", "name", "! Some ", "statement", " and ", "comment", "."]);
+}
+
+// Test some multiline template
+unittest {
+    auto p = Parser(
+            "Hello, {{ name }}!\n" ~
+            "Some text line here\n" ~
+            "\n\n" ~
+            "{% some statement %}");
+
+    assert(p.front.data == "Hello, ");
+    assert(p.front.type == FragmentType.Text);
+    assert(p.front.line == 0);
+    p.popFront;
+    assert(p.front.data == "name");
+    assert(p.front.type == FragmentType.Placeholder);
+    assert(p.front.line == 0);
+    p.popFront;
+    assert(p.front.data == "!\nSome text line here\n\n\n");
+    assert(p.front.type == FragmentType.Text);
+    assert(p.front.line == 0);
+    p.popFront;
+    assert(p.front.data == "some statement");
+    assert(p.front.type == FragmentType.Statement);
+    assert(p.front.line == 4);
+    p.popFront;
+    assert(p.empty);
+}
+
+unittest {
+    import std.algorithm;
+    import std.array: array;
+    immutable auto p = Parser(`Hello{% if check %} "{{ name }}"{% endif %}!`).array.map!((a) => a.data).array;;
+    assert(p == ["Hello", "if check", " \"", "name", "\"", "endif", "!"]);
+}
+
+// Test parsing imported file
+unittest {
+    auto p = Parser(import("test-templates/template.1.tmpl"));
+
+    assert(p.front.data == "Test template.\n\nUser: ");
+    assert(p.front.type == FragmentType.Text);
+    assert(p.front.line == 0);
+    p.popFront;
+    assert(p.front.data == "user.name");
+    assert(p.front.type == FragmentType.Placeholder);
+    assert(p.front.line == 2);
+    p.popFront;
+    assert(p.front.data == "\n");
+    assert(p.front.type == FragmentType.Text);
+    assert(p.front.line == 2);
+    p.popFront;
+    assert(p.front.data == "Show active or blocked state for user, depending on active field");
+    assert(p.front.type == FragmentType.Comment);
+    assert(p.front.line == 3);
+    p.popFront;
+    assert(p.front.data == "\nUser is ");
+    assert(p.front.type == FragmentType.Text);
+    assert(p.front.line == 3);
+    p.popFront;
+    assert(p.front.data == "if user.active");
+    assert(p.front.type == FragmentType.Statement);
+    assert(p.front.line == 4);
+    p.popFront;
+    assert(p.front.data == "active");
+    assert(p.front.type == FragmentType.Text);
+    assert(p.front.line == 4);
+    p.popFront;
+    assert(p.front.data == "else");
+    assert(p.front.type == FragmentType.Statement);
+    assert(p.front.line == 4);
+    p.popFront;
+    assert(p.front.data == "blocked");
+    assert(p.front.type == FragmentType.Text);
+    assert(p.front.line == 4);
+    p.popFront;
+    assert(p.front.data == "endif");
+    assert(p.front.type == FragmentType.Statement);
+    assert(p.front.line == 4);
+    p.popFront;
+    assert(p.front.data == "!\n");
+    assert(p.front.type == FragmentType.Text);
+    assert(p.front.line == 4);
+    p.popFront;
+    assert(p.empty);
 }

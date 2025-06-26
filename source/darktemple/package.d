@@ -1,3 +1,3 @@
 module darktemple;
 
-private import darktemple.statement;
+public import darktemple.render: render;

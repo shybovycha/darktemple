@@ -1,0 +1,5 @@
+Test template.
+
+User: {{ user.name }}
+{# Show active or blocked state for user, depending on active field #}
+User is {% if user.active %}active{% else %}blocked{% endif %}!
