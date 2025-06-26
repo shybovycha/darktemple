@@ -1,0 +1,13 @@
+name "darktemple"
+description "A minimal D application."
+authors "Dmytro Katyukha"
+copyright "Copyright © 2024, Dmytro Katyukha"
+license "MPL-2.0"
+targetType "library"
+
+configuration "library" {
+}
+
+configuration "unittest" {
+    dflags "-checkaction=context" "-allinst"
+}
