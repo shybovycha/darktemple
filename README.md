@@ -1,27 +1,28 @@
 # DarkTemple
 
-Born in the darkest place universe full of darkest magic....
+> Born in the darkest place universe full of darkest magic...
 
-It is jinja-like compile-time template engine for D programming language.
-The key goal for this implementation is to make it reliable, simple and convenient;
+DarkTemple is a [Jinja](https://jinja.palletsprojects.com/en/stable/)-like compile-time template engine for D programming language.
+The goal is to make it reliable, simple and convenient in the world of D.
 
-Currently, this is **dev** version of library.
-**Everything will be changed**.
+## Note
 
+This library is a work-in-progress project. API and implementation might change drastically.
 
 ## Usage
 
-### Simple example
+### Simple
 
 ```d
+string name = "John";
 assert(render!(`Hello "{{ name }}"!`, name) == `Hello "John"!`);
 ```
 
-### Example with file template
+### File template
 
-Let's assume that template file (named `template.1.tmpl`) has following content:
+`template.1.tmpl`:
 
-```
+```jinja
 Test template.
 
 User: {{ user.name }}
@@ -29,7 +30,7 @@ User: {{ user.name }}
 User is {% if user.active %}active{% else %}blocked{% endif %}!
 ```
 
-Use following code to render this file
+`main.d`:
 
 ```d
 struct User {
@@ -41,7 +42,7 @@ User user = User(name: "John", active: true);
 auto result = renderFile!("test-templates/template.1.tmpl", user);
 ```
 
-And result will be:
+The above code produces:
 
 ```
 Test template.
