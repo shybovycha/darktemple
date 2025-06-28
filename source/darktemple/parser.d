@@ -201,9 +201,15 @@ unittest {
     assert(fragments[3].data == "statement");
 
     assert(fragments[4].type == FragmentType.Text);
-    assert(fragments[4].data == " and .");
+    assert(fragments[4].data == " and ");
 
-    // Comment blocks should be ignored by the parser
+    assert(fragments[5].type == FragmentType.Comment);
+    assert(fragments[5].data == "comment");
+
+    assert(fragments[6].type == FragmentType.Text);
+    assert(fragments[6].data == ".");
+
+    // Comment blocks should **not** be ignored by the parser (but **should** be ignored by the renderer)
     assert(p.map!((in a) => a.data).array == ["Hello ", "name", "! Some ", "statement", " and ", "comment", "."]);
 }
 
