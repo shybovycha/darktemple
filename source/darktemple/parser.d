@@ -227,9 +227,10 @@ unittest {
 
 // Test parsing imported file
 unittest {
+    import std.ascii: newline;
     auto p = Parser(import("test-templates/template.1.tmpl"));
 
-    assert(p.front.data == "Test template.\n\nUser: ");
+    assert(p.front.data == "Test template." ~ newline ~ newline ~ "User: ");
     assert(p.front.type == FragmentType.Text);
     assert(p.front.line == 0);
     p.popFront;
@@ -237,7 +238,7 @@ unittest {
     assert(p.front.type == FragmentType.Placeholder);
     assert(p.front.line == 2);
     p.popFront;
-    assert(p.front.data == "\n");
+    assert(p.front.data == newline);
     assert(p.front.type == FragmentType.Text);
     assert(p.front.line == 2);
     p.popFront;
@@ -245,7 +246,7 @@ unittest {
     assert(p.front.type == FragmentType.Comment);
     assert(p.front.line == 3);
     p.popFront;
-    assert(p.front.data == "\nUser is ");
+    assert(p.front.data == newline ~ "User is ");
     assert(p.front.type == FragmentType.Text);
     assert(p.front.line == 3);
     p.popFront;
@@ -269,7 +270,7 @@ unittest {
     assert(p.front.type == FragmentType.Statement);
     assert(p.front.line == 4);
     p.popFront;
-    assert(p.front.data == "!\n");
+    assert(p.front.data == "!" ~ newline);
     assert(p.front.type == FragmentType.Text);
     assert(p.front.line == 4);
     p.popFront;
