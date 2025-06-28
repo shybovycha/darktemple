@@ -67,14 +67,17 @@ pure struct Parser {
             case FragmentType.Text:
                 // Do nothing here. It is just text
                 break;
+        
             case FragmentType.Placeholder, FragmentType.Statement, FragmentType.Comment:
                 _cursor += 2;
                 while (_data[_cursor].isWhite) _cursor++;
                 _block_start = _cursor;
                 break;
         }
+        
         while (_cursor < _data.length) {
-            if (_data[_cursor] == '\n') _cursor_ln++;
+            if (_data[_cursor] == '\n')
+                _cursor_ln++;
 
             final switch(_block_type) {
                 case FragmentType.Text:
@@ -83,24 +86,27 @@ pure struct Parser {
                         return;
                     }
                     break;
+                
                 case FragmentType.Placeholder:
-                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == Block.PlaceholderEnd) {
+                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor + 2] == Block.PlaceholderEnd) {
                         _block_end = _cursor;
                         _cursor += 2;
                         while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
                         return;
                     }
                     break;
+                
                 case FragmentType.Statement:
-                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == Block.StatementEnd) {
+                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor + 2] == Block.StatementEnd) {
                         _block_end = _cursor;
                         _cursor += 2;
                         while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
                         return;
                     }
                     break;
+                
                 case FragmentType.Comment:
-                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == Block.CommentEnd) {
+                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor + 2] == Block.CommentEnd) {
                         _block_end = _cursor;
                         _cursor += 2;
                         while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
@@ -111,35 +117,39 @@ pure struct Parser {
 
             _cursor++;
         }
+        
         _block_end = _data.length;
     }
 
     void findNextBlock() pure {
         if (_data.length - _cursor < 3) {
-            // There are less then 3 digits, left, thus it could be just text block.
+            // There are less then 3 characters left, treat them as text
             _block_type = FragmentType.Text;
             consumeBlock;
             return;
         }
+        
         import std.stdio;
+        
         switch (_data[_cursor .. _cursor + 2]) {
             case Block.PlaceholderStart:
                 _block_type = FragmentType.Placeholder;
-                consumeBlock;
-                return;
+                break;
+        
             case Block.StatementStart:
                 _block_type = FragmentType.Statement;
-                consumeBlock;
-                return;
+                break;
+            
             case Block.CommentStart:
                 _block_type = FragmentType.Comment;
-                consumeBlock;
-                return;
+                break;
+            
             default:
                 _block_type = FragmentType.Text;
-                consumeBlock;
-                return;
+                break;
         }
+
+        consumeBlock;
     }
 
     void popFront() pure
@@ -177,7 +187,23 @@ unittest {
     import std.array: array;
     auto p = Parser("Hello {{ name }}! Some {% statement %} and {# comment #}.");
 
-    // Comment blocks should be ignored (skipped) by parser.
+    auto fragments = array(p);
+    assert(fragments[0].type == FragmentType.Text);
+    assert(fragments[0].data == "Hello ");
+
+    assert(fragments[1].type == FragmentType.Placeholder);
+    assert(fragments[1].data == "name");
+
+    assert(fragments[2].type == FragmentType.Text);
+    assert(fragments[2].data == "! Some ");
+
+    assert(fragments[3].type == FragmentType.Statement);
+    assert(fragments[3].data == "statement");
+
+    assert(fragments[4].type == FragmentType.Text);
+    assert(fragments[4].data == " and .");
+
+    // Comment blocks should be ignored by the parser
     assert(p.map!((in a) => a.data).array == ["Hello ", "name", "! Some ", "statement", " and ", "comment", "."]);
 }
 
